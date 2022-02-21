@@ -21,13 +21,16 @@ import os
 # when testing this concept out. Users are encouraged to modify them and watch
 # how the cuts change
 
-filenames = "Data/ff_*.tif*"  # text or list of text; accepts wildcards
-high_threshold = 200  # intensities above this are given this value
-low_threshold = 5  # intensities below this are given this value
+filenames = "Data/AVG_*tif"  # text or list of text; accepts wildcards
+# high_threshold = 200  # intensities above this are given this value
+# low_threshold = 5  # intensities below this are given this value
+high_percentile = 99.995  # max threshold, given as a percentile
+low_percentile = 20  # min threshold, given as a percentile
 
 # In-plane (IP) weighting (how much pixels want to group with their neighbors)
 IP_curve = 0.8  # how "sharp" the weighting curve is. higher = more exclusive
-cutoff = 100  # intra-pixel deltas larger than this get the min IP weighting
+# cutoff = 100  # larger intra-pixel deltas than this get min weighting
+prop_cutoff = 0.5  # same as cuttoff, but proportional to max delta
 IP_min = 0.2  # minimum IP connection weight, as a fraction of the maximum
 IP_nn = 4  # number of nearest neighbors to consider for IP connections
 
@@ -39,11 +42,11 @@ inverse = True
 # Post Processing
 dialation_steps = 2  # number of times result is dialated before segmentation
 dialation_nn = 4  # number of nearest neighbors to consider for dialation
-min_spot_size = 36  # Don't go below 9, things will break
+min_spot_size = 60  # Don't go below 9, things will break
 
 # Saving data
-save_as_img = False
-save_as_txt = False
+save_as_img = True
+save_as_txt = True
 
 # visualization tools (switch off for large processes)
 show_weighting_equations = True
@@ -67,10 +70,13 @@ for i_count, orig_img in enumerate(image_stack):
     print("\n\n{}\n working on image {}\n".format("="*40, files[i_count]))
 
     # Pre-process image according to thresholds
+#    orig_img = orig_img[1000:2000, 1000:2000]
     img = orig_img*1
+    high_threshold = np.percentile(orig_img, high_percentile)
+    low_threshold = np.percentile(orig_img, low_percentile)
     img[img < low_threshold] = low_threshold
     img[img > high_threshold] = high_threshold
-
+    
     # Make an empty graph,then exclude any pixels too dark to even consider.
     # NOTE: don't worry if we take out a few important oddball pixels here,
     # we are going to do a dialation step at the end to regrab them.
@@ -96,6 +102,7 @@ for i_count, orig_img in enumerate(image_stack):
     # 2) Here, the IP weights are calculated from the delta between neighboring
     #    pixels, but a sobel filter is also common. Change "style" to "sobel"
     #    see how the results change, and/or add your own.
+    cutoff = (high_threshold - low_percentile)*prop_cutoff
     IP_ws, neigh_map = fn.calc_IP_weights(img, IP_curve, cutoff,
                                           IP_min, IP_nn, style='sobel')
     # Extra IP_weighting step specifically for ff_HEDM data. I found that if
@@ -159,26 +166,33 @@ for i_count, orig_img in enumerate(image_stack):
         ax.legend(handles=[l1, l2, l3])
     if show_IP_map:
         plt.figure("In-Plane connection map (averages)")
-        plt.imshow(np.stack(IP_ws, axis=2).mean(axis=2))
-#        plt.imsave(savename+"_IP.png", IP_ws)
+        IP_img = np.stack(IP_ws, axis=2).mean(axis=2)
+        plt.imshow(IP_img)
+        plt.imsave(savename+"_IP.png", IP_img)
     if show_OP_map:
         plt.figure("Out-Of-Plane connection map")
         plt.imshow(source)  # [2050:2350,3200:3500])
-#        plt.imsave(savename+"_OP.png", source)
+        plt.imsave(savename+"_OP.png", source)
     if show_original:
         plt.figure("Original Image")
         plt.imshow(orig_img)  # [2050:2350,3200:3500])
-#        plt.imsave(savename+"_orig.png", orig_img)
+        plt.imsave(savename+"_orig.png", orig_img)
     if show_pre_clean:
         plt.figure("Image before Post")
         plt.imshow(sgm)  # [2050:2350,3200:3500])
-#        plt.imsave(savename+"_pre_clean.png", orig_img)
+        plt.imsave(savename+"_pre_clean.png", orig_img)
     if show_filtered:
         plt.figure("original spots with background removed")
         plt.imshow(filtered)  # [2050:2350,3200:3500])
+        plt.imsave(savename+"_post_clean.png", orig_img)
     if show_labeled:
         plt.figure("labeled spots")
         plt.imshow(good_spots)  # [2050:2350,3200:3500])
+        plt.imsave(savename+"_labels.png", orig_img)
 
     print(files[i_count]+" Complete")
+    print("="*25)
+    print(str(np.unique(good_spots).size)+" Spots Identified")
+    print("="*25)
+
 print("DONEZO!")
