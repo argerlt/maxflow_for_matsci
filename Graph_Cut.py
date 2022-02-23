@@ -3,6 +3,9 @@
 Spyder Editor
 
 This is a temporary script file.
+
+fix grain cut approach
+add histEq and median filter preproc
 """
 
 import numpy as np

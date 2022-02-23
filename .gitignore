@@ -147,5 +147,5 @@ Data/*.hdf5
 Data/Output/*
 !Data/ff_hedm.tif
 
-
-
+#simon additions
+.DS_Store
