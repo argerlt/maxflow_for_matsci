@@ -21,7 +21,7 @@ import os
 # when testing this concept out. Users are encouraged to modify them and watch
 # how the cuts change
 
-filenames = "Data/AVG_*tif"  # text or list of text; accepts wildcards
+filenames = "Data/ff_*tif"  # text or list of text; accepts wildcards
 # high_threshold = 200  # intensities above this are given this value
 # low_threshold = 5  # intensities below this are given this value
 high_percentile = 99.995  # max threshold, given as a percentile

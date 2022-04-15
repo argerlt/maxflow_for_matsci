@@ -10,6 +10,8 @@ from scipy.spatial.transform import Rotation as R
 from scipy import ndimage
 from glob import glob as glob
 from PIL import Image
+import matplotlib.pyplot as plt
+import cv2
 
 
 def load_ang(ebsd_file):
@@ -124,6 +126,8 @@ def calc_OP_weights(img, target, OP_curve, inverse):
     source : 2D numpy arrays
         sink weights
     """
+    mask = np.zeros_like(img)
+    mask[img >= 0] = 1
     likelyhood = np.abs(img - target)
     likelyhood = likelyhood/likelyhood.max()
     OP_weight = (likelyhood*0 + 1) - (likelyhood**OP_curve)
@@ -133,6 +137,9 @@ def calc_OP_weights(img, target, OP_curve, inverse):
     else:
         source = OP_weight*1
         sink = 1-source
+
+    source = source*mask
+    sink = sink*mask
     return(source, sink)
 
 
@@ -175,8 +182,14 @@ def calc_IP_weights(img, IP_curve, cutoff, IP_min, IP_nn, style):
         D2_delta = np.zeros(img.shape)
         D2_delta[:-1, 1:] = np.abs(img[1:, :-1] - img[:-1, 1:])
     elif style == 'sobel':
-        LR_delta = ndimage.sobel(img, axis=0)
-        UD_delta = ndimage.sobel(img, axis=1)
+        # LR_delta = ndimage.sobel(img, axis=0)
+        # UD_delta = ndimage.sobel(img, axis=1)
+        sobel_x = cv2.Sobel(img, cv2.CV_16S, 1, 0, ksize=3, scale=1, delta=0, borderType=cv2.BORDER_DEFAULT)
+        sobel_y = cv2.Sobel(img, cv2.CV_16S, 0, 1, ksize=3, scale=1, delta=0, borderType=cv2.BORDER_DEFAULT)
+        # LR_delta = cv2.bitwise_not(cv2.convertScaleAbs(sobel_x))
+        # UD_delta = cv2.bitwise_not(cv2.convertScaleAbs(sobel_y))
+        LR_delta = cv2.convertScaleAbs(sobel_x)
+        UD_delta = cv2.convertScaleAbs(sobel_y)
         D1_delta = np.abs(np.hypot(LR_delta, UD_delta))
         D2_delta = np.abs(np.hypot(LR_delta, UD_delta*-1))
         LR_delta = np.abs(LR_delta)
@@ -188,13 +201,17 @@ def calc_IP_weights(img, IP_curve, cutoff, IP_min, IP_nn, style):
     normed_weights = [(x > 0)*x for x in raw_weights]
     eqn_weights = [1 - (x**IP_curve) for x in normed_weights]
     final_weights = [(x > IP_min)*(x - IP_min) + IP_min for x in eqn_weights]
+    # plt.figure()
+    # plt.imshow(final_weights[0])
+    # # plt.imshow(LR_delta)
+    # plt.show()
     if IP_nn == 8:
         return ([final_weights],
                 [VN_locs[x] for x in ['R', 'D', 'UR', 'DR']])
     else:
-        return (final_weights[:2],
-                [VN_locs[x] for x in ['R', 'D']])
-
+        # return (final_weights[:2],
+        #         [VN_locs[x] for x in ['R', 'D']])
+        return ([LR_delta, UD_delta], [VN_locs[x] for x in ['R', 'D']])
 
 def dialate_mask(sgm, dialation_steps, dialation_nn):
     """
@@ -264,6 +281,21 @@ def make_a_guess(img, past_guesses):
         print("      BEANS!!!!")
     count = count/np.linalg.norm(count)
     choice = np.random.choice(np.arange(256), 1, p=(count.astype(float))**2)[0]
+#    choice = choices[np.random.randint(choices.size)]
+    past_guesses.append(choice)
+    return choice, past_guesses
+
+def make_a_guess_ordered(img, past_guesses):
+    med_img = ndimage.median_filter(img, size=2)
+    choices = med_img[med_img >= 0]
+    count = np.histogram(choices, bins=np.arange(-0.5, 256.5))[0]
+    count[past_guesses] = 0
+    if np.sum(count) == 0:
+        past_guesses = []
+        count = (np.histogram(choices, bins=np.arange(-0.5, 256.5))[0])**3
+        print("      BEANS!!!!")
+    count = count/np.linalg.norm(count)
+    choice = np.min(np.min(choices))
 #    choice = choices[np.random.randint(choices.size)]
     past_guesses.append(choice)
     return choice, past_guesses
